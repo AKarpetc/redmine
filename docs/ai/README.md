@@ -4,6 +4,25 @@ Built with **Claude Code**. This folder is the AI-workflow record for the plugga
 rate limiter (pillar 3 of #43881). The deliverable README is `README_RATE_LIMITING.md` at
 the repository root.
 
+## Approach — Spec-Driven Development (SDD)
+
+This slice was built **spec-first**: instead of jumping straight to code, each phase produced
+a reviewed document before the next began —
+**feature specification → task decomposition → implementation plan → code → code review**.
+Every phase is captured as a durable artifact in this folder (specs) and under
+[`issue-43881/prompts/`](issue-43881/prompts/) (the prompts that drove each phase), and the
+git history commits one step per decomposition task, so the plan and the code stay traceable
+to each other.
+
+## Agents & models
+
+Two models were used, each for the stage it fits best:
+
+| Stage | Agent / model | Why |
+|---|---|---|
+| Code & task decomposition | **Claude Code — Opus 4.8** | Long-context reasoning over the Redmine codebase: implementing the slice and decomposing the work into small, committable tasks |
+| Prompt preparation | **Gemini 3.1 Pro** | Drafting and refining the prompts (spec generation, architect review, code review) that drove each SDD phase |
+
 ## Contents
 
 The per-issue artifacts live under [`issue-43881/`](issue-43881/README.md) — **start there**
