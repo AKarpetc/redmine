@@ -73,6 +73,11 @@ class ApplicationController < ActionController::Base
 
   include Redmine::SudoMode::Controller
 
+  # API rate limiting (#43881). Included after the before_action chain above so
+  # check_api_rate_limit runs post-auth (User.current already resolved), keying
+  # authenticated callers by user id and anonymous ones by IP.
+  include ApiRateLimitable
+
   def session_expiration
     if session[:user_id] && Rails.application.config.redmine_verify_sessions != false
       if session_expired? && !try_to_autologin
