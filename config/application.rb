@@ -89,6 +89,15 @@ module RedmineApp
     # for more options (same options as config.cache_store).
     config.redmine_search_cache_store = :memory_store
 
+    # Specific cache store for API rate-limit counters (see #43881). A memory
+    # store is used as the default so a stock single-process install works with
+    # zero configuration. If you're running multiple server processes and want a
+    # single shared limit (rather than limit x processes), switch to a shared
+    # store (eg. :redis_cache_store or :mem_cache_store) after adding the
+    # matching gem. See http://guides.rubyonrails.org/caching_with_rails.html#cache-stores
+    # for the available options (same options as config.cache_store).
+    config.redmine_api_rate_limit_cache_store = :memory_store
+
     # Sets default plugin directory
     config.redmine_plugins_directory = 'plugins'
 
