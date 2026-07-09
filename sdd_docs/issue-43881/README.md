@@ -12,6 +12,107 @@ The challenge brief is according to tech task.
 | [task-decomposition.md](task-decomposition.md) | Task breakdown split into a **~2.5h core** (incl. the resilience floor) and an **extension tier**, with time allocations and cut lines |
 | [implementation-plan.md](implementation-plan.md) | Technical plan: architecture, files created/modified, key interfaces, storage config, **fail-open + failover design (§3b)**, **rotating-key fixed window (§3c)**, testing strategy, verification, deliverable README outline |
 
+## Enabling & configuring the rate limiter
+
+Full reference: [`README_RATE_LIMITING.md`](../../README_RATE_LIMITING.md) at the repo root.
+Quick guide below.
+
+### Enable / disable
+
+The limiter is **enabled by default** (100 requests / 60 s, fixed window, per-process
+memory store). Toggle it from **Administration → Settings → API**, or from the console:
+
+```ruby
+Setting.rest_api_rate_limit_enabled = '1'   # '0' to disable
+```
+
+When disabled the `before_action` short-circuits and no `X-RateLimit-*` headers are emitted.
+
+### Configure the algorithm & parameters
+
+All are `Setting` rows (no migration) — editable on the **Settings → API** tab or console:
+
+| Setting | Default | Applies to |
+| --- | --- | --- |
+| `rest_api_rate_limit_enabled` | `1` | all |
+| `rest_api_rate_limit_algorithm` | `fixed_window` | selector (`fixed_window`, `sliding_window_counter`, `token_bucket`) |
+| `rest_api_rate_limit_requests` | `100` | fixed / sliding-window — max requests |
+| `rest_api_rate_limit_window` | `60` | fixed / sliding-window — window seconds |
+| `rest_api_rate_limit_burst` | `100` | token bucket — capacity |
+| `rest_api_rate_limit_refill_rate` | `1.67` | token bucket — tokens/sec |
+
+Unknown/blank algorithm falls back to `fixed_window`; irrelevant parameters are ignored.
+
+```ruby
+Setting.rest_api_rate_limit_algorithm = 'sliding_window_counter'
+Setting.rest_api_rate_limit_requests  = '200'
+Setting.rest_api_rate_limit_window    = '60'
+```
+
+### Configure storage (the flexibility axis)
+
+One line in `config/application.rb`, mirroring the existing `redmine_search_cache_store`:
+
+```ruby
+config.redmine_api_rate_limit_cache_store = :memory_store   # default
+```
+
+| Store | Topology | Notes |
+| --- | --- | --- |
+| `:memory_store` | Single process | Per-process counters; fastest; **default** |
+| `:file_store` | Single host, multi-process | Shared via filesystem; slower |
+| `:mem_cache_store` | Multi-host | Shared; add the `dalli` gem |
+| `:redis_cache_store` | Multi-host, high volume | Shared; add the `redis` gem |
+| custom | anything | Any `ActiveSupport::Cache::Store` subclass |
+
+**Correctness depends on the store:** a single shared store (Redis/memcached) enforces one
+global limit; a per-process store enforces the limit *per process*, so the effective global
+limit is `limit × processes`. Multi-instance deployments should use a shared store. Redis /
+memcached require the operator to add the gem (documented, not bundled).
+
+### Availability options
+
+The limiter is in the hot path of every API request, so **enforcement is sacrificed before
+availability** — a storage fault degrades to *allow*, never to a 500.
+
+1. **Fail-open (always on).** Any storage error — a raised exception *or* a `nil` return
+   (e.g. `RedisCacheStore`'s internal `failsafe`) — allows the request, fires an
+   `api_rate_limiter.error` notification, and logs it. Nothing to configure.
+2. **Bounded latency for shared stores.** Give the store explicit client timeouts so a
+   *slow* (not dead) backend costs a bounded per-request penalty before failing open:
+
+   ```ruby
+   config.redmine_api_rate_limit_cache_store = ActiveSupport::Cache::RedisCacheStore.new(
+     url: ENV['REDIS_URL'],
+     connect_timeout: 0.2, read_timeout: 0.2, write_timeout: 0.2, reconnect_attempts: 0
+   )
+   ```
+3. **`FailoverStore` circuit breaker (implemented, opt-in / not wired by default).** Wrap the
+   store to degrade a failed shared primary to a per-process fallback and auto-recover:
+
+   ```ruby
+   Redmine::ApiRateLimiter.store = Redmine::ApiRateLimiter::FailoverStore.new(
+     primary:  ActiveSupport::Cache.lookup_store(config.redmine_api_rate_limit_cache_store),
+     fallback: ActiveSupport::Cache::MemoryStore.new(size: 32.megabytes)
+   )
+   ```
+
+   Honest degradation: shared→per-process failover changes the guarantee to `limit ×
+   processes`, the fallback starts at zero (a brief burst is allowed at failover), and
+   breaker transitions are instrumented (`api_rate_limiter.circuit_open`) so the degradation
+   is alertable.
+
+### Verify
+
+```bash
+bin/rails s
+KEY=<your api key>
+for i in $(seq 1 105); do
+  curl -s -o /dev/null -w "%{http_code} " \
+       -H "X-Redmine-API-Key: $KEY" http://localhost:3000/projects.json
+done; echo   # expect trailing 429s after request 100
+```
+
 ## AI workflow — prompts
 
 The prompts used to produce these docs are saved under [`prompts/`](prompts/) as AI-workflow
