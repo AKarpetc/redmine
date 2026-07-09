@@ -201,6 +201,8 @@ en:
   notice_invalid_watcher: "Invalid watcher: User will not receive any notifications because they do not have access to view this object."
 
   error_can_t_load_default_data: "Default configuration could not be loaded: %{value}"
+  error_api_rate_limit_short: "Rate limit exceeded"
+  error_api_rate_limit_exceeded: "You have exceeded the rate limit of %{limit} requests per %{window}. Try again in %{retry_after} seconds."
   error_scm_not_found: "The entry or revision was not found in the repository."
   error_scm_command_failed: "An error occurred when trying to access the repository: %{value}"
   error_scm_annotate: "The entry does not exist or cannot be annotated."
@@ -490,6 +492,15 @@ en:
   setting_issue_done_ratio_issue_status: Use the issue status
   setting_start_of_week: Start calendars on
   setting_rest_api_enabled: Enable REST web service
+  setting_rest_api_rate_limit_enabled: Enable API rate limiting
+  setting_rest_api_rate_limit_algorithm: Rate limiting algorithm
+  setting_rest_api_rate_limit_requests: Max requests per window
+  setting_rest_api_rate_limit_window: Window length (seconds)
+  setting_rest_api_rate_limit_burst: Bucket capacity (token bucket)
+  setting_rest_api_rate_limit_refill_rate: Refill rate in tokens/second (token bucket)
+  label_api_rate_limit_algorithm_fixed_window: Fixed window
+  label_api_rate_limit_algorithm_sliding_window_counter: Sliding window counter
+  label_api_rate_limit_algorithm_token_bucket: Token bucket
   setting_cache_formatted_text: Cache formatted text
   setting_default_notification_option: Default notification option
   setting_commit_logtime_enabled: Enable time logging

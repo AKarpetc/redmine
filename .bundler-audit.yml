@@ -1,0 +1,20 @@
+# bundler-audit ignore list.
+#
+# Directly-fixable advisories on the Redmine 6.1.2 baseline are patched in the
+# Gemfile rather than ignored:
+#   * rails   7.2.3 -> 7.2.3.1  (Action View / Storage / Support CVEs, #43881 PR)
+#   * sqlite3 2.5.0 -> 2.9.5    (dev/test SQLite adapter use-after-free CVEs)
+#
+# The entry below is ignored because it cannot be remediated within the frozen
+# 6.1.2 dependency set without a disproportionate, out-of-scope upgrade.
+---
+ignore:
+  # css_parser SSRF / local-file disclosure in CssParser::Parser#read_remote_file.
+  # Fix needs css_parser >= 3.0.0, but css_parser is a TRANSITIVE dependency
+  # capped at "< 3.0" by roadie (the email CSS inliner), which Redmine 6.1.2
+  # pins as `roadie-rails "~> 3.3.0"`. Clearing it would force a major roadie
+  # upgrade -- a core email-stack change well outside this API rate-limiting
+  # slice. Not reachable with attacker input in normal operation: Redmine
+  # inlines its own trusted email templates, not untrusted CSS with remote
+  # @import directives. Revisit when the base Redmine bumps roadie.
+  - GHSA-9pmc-p236-855h

@@ -6,5 +6,26 @@
 <p><%= setting_check_box :jsonp_enabled %></p>
 </div>
 
+<fieldset class="box tabular settings">
+<legend><%= l(:setting_rest_api_rate_limit_enabled) %></legend>
+
+<p><%= setting_check_box :rest_api_rate_limit_enabled %></p>
+
+<p><%= setting_select :rest_api_rate_limit_algorithm,
+        [
+          [l(:label_api_rate_limit_algorithm_fixed_window), 'fixed_window'],
+          [l(:label_api_rate_limit_algorithm_sliding_window_counter), 'sliding_window_counter'],
+          [l(:label_api_rate_limit_algorithm_token_bucket), 'token_bucket']
+        ] %></p>
+
+<p><%= setting_text_field :rest_api_rate_limit_requests, :size => 6 %></p>
+
+<p><%= setting_text_field :rest_api_rate_limit_window, :size => 6 %></p>
+
+<p><%= setting_text_field :rest_api_rate_limit_burst, :size => 6 %></p>
+
+<p><%= setting_text_field :rest_api_rate_limit_refill_rate, :size => 6 %></p>
+</fieldset>
+
 <%= submit_tag l(:button_save) %>
 <% end %>

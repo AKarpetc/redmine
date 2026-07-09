@@ -64,6 +64,9 @@ class ActiveSupport::TestCase
   # Clear Settings cache after each test to prevent test interference
   teardown do
     Setting.clear_cache
+    # Drop the memoized API rate-limit store so counters never bleed across
+    # tests (the limiter is enabled by default; #43881).
+    Redmine::ApiRateLimiter.reset_store!
   end
 
   def uploaded_test_file(name, mime)

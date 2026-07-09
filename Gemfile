@@ -2,7 +2,7 @@ source 'https://rubygems.org'
 
 ruby '>= 3.2.0', '< 3.5.0'
 
-gem 'rails', '7.2.3'
+gem 'rails', '7.2.3.1'
 gem 'rouge', '~> 4.5'
 gem 'mini_mime', '~> 1.1.0'
 gem "actionpack-xml_parser"
@@ -23,6 +23,13 @@ gem "doorkeeper", "~> 5.8.2"
 gem "bcrypt", require: false
 gem "doorkeeper-i18n", "~> 5.2"
 gem "requestjs-rails", "~> 0.0.13"
+
+# Optional: shared cache store for the API rate limiter (#43881). Not required
+# by core Redmine; add only when using :redis_cache_store for counters.
+gem "redis", "~> 5.0"
+# connection_pool 3.x changed ConnectionPool.new's signature; ActiveSupport
+# 7.2's RedisCacheStore still uses the 2.x form. Pin to 2.x.
+gem "connection_pool", "~> 2.5"
 
 #  Ruby Standard Gems
 gem 'csv', '~> 3.3.2'
@@ -79,7 +86,7 @@ if File.exist?(database_file)
       when /postgresql/
         gem 'pg', '~> 1.5.3'
       when /sqlite3/
-        gem 'sqlite3', '~> 2.5.0'
+        gem 'sqlite3', '~> 2.9', '>= 2.9.5'
       when /sqlserver/
         gem 'tiny_tds', '~> 2.1.2'
         gem 'activerecord-sqlserver-adapter', '~> 7.2.0'

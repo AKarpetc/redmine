@@ -336,6 +336,27 @@ rest_api_enabled:
 jsonp_enabled:
   default: 0
   security_notifications: 1
+rest_api_rate_limit_enabled:
+  default: 1
+  security_notifications: 1
+rest_api_rate_limit_algorithm:
+  default: 'fixed_window'
+  security_notifications: 1
+rest_api_rate_limit_requests:
+  format: int
+  default: 100
+  security_notifications: 1
+rest_api_rate_limit_window:
+  format: int
+  default: 60
+  security_notifications: 1
+rest_api_rate_limit_burst:
+  format: int
+  default: 100
+  security_notifications: 1
+rest_api_rate_limit_refill_rate:
+  default: '1.67'
+  security_notifications: 1
 default_notification_option:
   default: 'only_assigned'
 emails_header:
