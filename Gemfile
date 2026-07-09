@@ -24,6 +24,13 @@ gem "bcrypt", require: false
 gem "doorkeeper-i18n", "~> 5.2"
 gem "requestjs-rails", "~> 0.0.13"
 
+# Optional: shared cache store for the API rate limiter (#43881). Not required
+# by core Redmine; add only when using :redis_cache_store for counters.
+gem "redis", "~> 5.0"
+# connection_pool 3.x changed ConnectionPool.new's signature; ActiveSupport
+# 7.2's RedisCacheStore still uses the 2.x form. Pin to 2.x.
+gem "connection_pool", "~> 2.5"
+
 #  Ruby Standard Gems
 gem 'csv', '~> 3.3.2'
 gem 'net-imap', '~> 0.5.7'
