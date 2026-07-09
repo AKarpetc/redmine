@@ -5,7 +5,7 @@ A pluggable, configurable API rate limiter for Redmine. Over-limit API callers g
 well-behaved clients can self-throttle before they are rejected.
 
 This is **one pillar** of the six-part [#43881 — Strengthen API authentication](https://www.redmine.org/issues/43881)
-ticket, shipped as a self-contained, tested slice. The other pillars are deferred (§8).
+ticket, shipped as a self-contained, tested slice. The other pillars are deferred (§9).
 
 ---
 
@@ -188,7 +188,7 @@ depth); breaker transitions are instrumented so a silent degradation is still al
    Consequence: an **anonymous flood keyed by IP still runs `find_current_user` (a DB
    lookup)** before the limiter can shed it — this is an abuse/fairness limiter for
    authenticated callers, **not** a DoS shield for the auth/DB layer. A cheap Rack-level IP
-   throttle is the complementary front line and is deferred (§8).
+   throttle is the complementary front line and is deferred (§9).
 2. **Store determines the guarantee** — shared store = one global limit; `:memory_store` =
    per-process limit.
 3. **Fixed window (default) allows up to 2× across a boundary** — chosen for its minimal
@@ -208,7 +208,28 @@ depth); breaker transitions are instrumented so a silent degradation is still al
    avoid a divide-by-zero; counts/rates floor at 0). A `requests` of `0` therefore blocks
    all API traffic by design rather than raising.
 
-## 8. Deferred
+## 8. Assumptions
+
+Defaults and scope decisions made for this slice (overridable — each is a `Setting` or a
+one-line config change unless noted):
+
+1. **Enabled by default** at 100 requests / 60 s. Core Redmine might ship it *off* for strict
+   backward compatibility; "on" demonstrates the feature out of the box and is the safer
+   posture for an API-hardening ticket. Flip `rest_api_rate_limit_enabled` to `0` to disable.
+2. **`fixed_window` is the default algorithm** — lowest memory and portable across every
+   store. Operators wanting boundary smoothing switch to `sliding_window_counter`.
+3. **`:memory_store` is the default backend**, matching the single-process common case and
+   the existing `redmine_search_cache_store` default. Multi-process/multi-host deployments
+   are assumed to switch to a shared store (§3) for one true global limit.
+4. **Per-user identity, IP for anonymous.** Redmine 6.1.2 has one API key per user, so a
+   per-user key is the correct granularity until personal access tokens (a deferred pillar)
+   exist; anonymous callers fall back to `request.remote_ip`.
+5. **No schema migration.** All configuration lives in `Setting` key/value rows, so the slice
+   installs with `db:migrate` as a no-op and no new tables.
+6. **Counting happens post-auth**, inside `ApplicationController`, so identity is already
+   resolved — accepting the trade-off in §7 (item 1) that it is not a pre-auth DoS shield.
+
+## 9. Deferred
 
 - **Other #43881 pillars:** personal access tokens with expiration, scoped permissions,
   audit logging (the limiter `before_action` is a natural hook), granular endpoint control,
@@ -218,7 +239,7 @@ depth); breaker transitions are instrumented so a silent degradation is still al
 - **`FailoverStore` wiring** (Layer 2 above — implemented, not wired).
 - **A cheap Rack-level IP throttle** as a pre-auth front line for anonymous floods.
 
-## 9. Run & verify
+## 10. Run & verify
 
 ```bash
 # clone the fork, check out the branch, off tag 6.1.2
@@ -390,7 +411,7 @@ Switch algorithms and re-run to watch `rl:fw:*` / `rl:swc:*` counters increment 
 shared Redis this count is the single global limit — the correctness upgrade over per-process
 memory counters (§3).
 
-## 10. AI workflow
+## 11. AI workflow
 
 Built with Claude Code. The planning artifacts (feature spec, task decomposition,
 implementation plan) and the prompts that produced them live under

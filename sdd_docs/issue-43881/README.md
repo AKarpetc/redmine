@@ -122,6 +122,7 @@ artifacts:
 | --- | --- |
 | [prompts/1. spec-generate.md](prompts/1.%20spec-generate.md) | Generating the spec/plan/decomposition — the `[DOCS ONLY]` prompt with the full challenge requirements and grounding constraints |
 | [prompts/2. docs-review-prompts.md](prompts/2.%20docs-review-prompts.md) | The Principal-Architect review pass over the spec (flexibility + availability / graceful-degradation focus) that drove the fail-open + failover revisions |
+| [prompts/3. code-review.md](prompts/3.%20code-review.md) | The post-implementation deep code review (correctness, architecture, SOLID/DRY, security/resilience, tests, docs) whose findings were then fixed — settings clamping, DRY/naming cleanups, `FailoverStore` tests, extra integration coverage, and doc-accuracy fixes |
 
 ## Context in one paragraph
 
@@ -160,5 +161,7 @@ design.
 ## Status
 
 - [x] Plan drafted (these documents)
-- [ ] Plan approved
-- [ ] Implementation started
+- [x] Plan approved
+- [x] Implementation complete (rate-limiting core: 3 algorithms, fail-open, 429 contract, admin UI)
+- [x] Tests passing (48 tests — 13 integration + 35 unit, incl. `FailoverStore` coverage)
+- [x] Code review complete and findings addressed (prompt 3; see commit history)

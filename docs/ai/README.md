@@ -11,16 +11,20 @@ the repository root.
 | [feature-specification.md](feature-specification.md) | Scope; the two pluggability axes (storage + algorithm) and the availability axis (fail-open + `FailoverStore`); strategy choice; trade-offs; deferred pillars |
 | [implementation-plan.md](implementation-plan.md) | Architecture, files, key interfaces, fail-open + failover design (§3b), rotating-key fixed window (§3c), 429 contract (§3d), testing strategy |
 | [task-decomposition.md](task-decomposition.md) | Core (~2.5h) vs. extension tiers, time-boxing, cut lines |
-| [prompts/](prompts/) | The prompts used to generate the planning docs and the architect review pass |
+| [prompts/](prompts/) | The prompts used to generate the planning docs, the architect review pass, and the post-implementation code review |
 
 ## Process
 
-1. **Plan (docs only).** The prompts in `prompts/` produced the spec, plan, and
-   decomposition, grounded against the `6.1.2` tag (verified facts listed in the spec).
+1. **Plan (docs only).** Prompt 1 (`prompts/1. spec-generate.md`) produced the spec, plan,
+   and decomposition, grounded against the `6.1.2` tag (verified facts listed in the spec).
 2. **Architect review.** A Principal-Architect review pass (prompt 2) drove the
    fail-open + `FailoverStore` failover revisions and the rotating-key portability fix.
 3. **Implement per task.** Commits are made per decomposition task so the git history
    doubles as a workflow artifact.
+4. **Code review.** A deep code-review pass (prompt 3, `prompts/3. code-review.md`) audited
+   the implementation, tests, and docs; its findings were then fixed (see the commit
+   history) — settings clamping, DRY/naming cleanups, `FailoverStore` tests, extra
+   integration coverage, and doc-accuracy fixes.
 
 ## Verification note
 
