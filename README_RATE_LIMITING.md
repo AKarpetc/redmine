@@ -237,6 +237,85 @@ Setting.rest_api_rate_limit_algorithm = 'sliding_window_counter'
 config.redmine_api_rate_limit_cache_store = :redis_cache_store
 ```
 
+### Testing each algorithm manually
+
+The algorithm and its parameters are `Setting` rows, so you switch algorithms **live** — no
+restart, no code change. Set them from **Administration → Settings → API**, or from the
+console (`bin/rails runner "<line>"`). All three examples below use small limits so the 429
+is easy to observe, and this shared setup:
+
+```bash
+KEY=<your api key>                       # My account -> API access key
+URL=http://localhost:3000/projects.json
+
+# reusable loop: fire N requests, print the status code of each
+hammer () { for i in $(seq 1 "$1"); do
+  curl -s -o /dev/null -w "req $i -> %{http_code}\n" -H "X-Redmine-API-Key: $KEY" "$URL"
+done; }
+
+# see the headers/body of a single (rejected) call
+peek () { curl -s -D - -H "X-Redmine-API-Key: $KEY" "$URL" | \
+  grep -iE "HTTP/|X-RateLimit|Retry-After|error|message"; }
+```
+
+Between runs, reset the counters: on `:memory_store` restart the server (or wait out the
+window / refill); on Redis run `redis-cli -n <db> flushdb`.
+
+#### 1. Fixed Window (default)
+
+```bash
+bin/rails runner "Setting.rest_api_rate_limit_enabled='1';
+  Setting.rest_api_rate_limit_algorithm='fixed_window';
+  Setting.rest_api_rate_limit_requests='5'; Setting.rest_api_rate_limit_window='60'"
+```
+
+```bash
+hammer 7      # req 1-5 -> 200, req 6-7 -> 429
+peek          # X-RateLimit-Limit: 5, Remaining: 0, Retry-After: <secs to window end>
+              # "...rate limit of 5 requests per minute..."
+```
+
+Note the boundary behaviour: because the window is fixed, up to `2 × limit` can slip through
+across a window edge (5 at the end of one window + 5 at the start of the next).
+
+#### 2. Sliding Window Counter
+
+```bash
+bin/rails runner "Setting.rest_api_rate_limit_algorithm='sliding_window_counter';
+  Setting.rest_api_rate_limit_requests='5'; Setting.rest_api_rate_limit_window='60'"
+```
+
+```bash
+hammer 7      # req 1-5 -> 200, req 6-7 -> 429
+```
+
+Same limit as fixed window, but the previous window is weighted by how much of it still
+overlaps the current one, so the boundary burst is smoothed — a caller that maxed out the
+last window is rejected early in the next one instead of getting a fresh full allowance.
+
+#### 3. Token Bucket
+
+```bash
+bin/rails runner "Setting.rest_api_rate_limit_algorithm='token_bucket';
+  Setting.rest_api_rate_limit_burst='10'; Setting.rest_api_rate_limit_refill_rate='0.1667'"
+# burst 10 = 10 immediate requests; refill 0.1667/s ~= 10 per minute
+```
+
+```bash
+hammer 12     # req 1-10 -> 200 (the burst), req 11-12 -> 429
+peek          # X-RateLimit-Limit: 10, Remaining: 0, Retry-After: ~6
+              # "...rate limit of 10 requests per minute. Try again in 6 seconds."
+sleep 6; hammer 1   # one token refilled -> 200 again
+```
+
+The bucket absorbs an organic burst (up to `burst`) then throttles to the sustained
+`refill_rate`. Note the documented caveat: token bucket is **exact on a single-process
+`:memory_store`** and **approximate on a shared store under concurrency** (§4).
+
+> Postman: import any curl above via **Import → Raw text**, then use the **Collection Runner**
+> (set *Iterations* to e.g. 12) to fire it repeatedly and watch the 200 → 429 transition and
+> the `X-RateLimit-*` headers count down.
+
 ## 10. AI workflow
 
 Built with Claude Code. The planning artifacts (feature spec, task decomposition,
