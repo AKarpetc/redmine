@@ -6,23 +6,27 @@ the repository root.
 
 ## Contents
 
+The per-issue artifacts live under [`issue-43881/`](issue-43881/README.md) — **start there**
+for the full spec index, one-paragraph context, and the facts verified against tag `6.1.2`.
+
 | File | What it is |
 |---|---|
-| [feature-specification.md](feature-specification.md) | Scope; the two pluggability axes (storage + algorithm) and the availability axis (fail-open + `FailoverStore`); strategy choice; trade-offs; deferred pillars |
-| [implementation-plan.md](implementation-plan.md) | Architecture, files, key interfaces, fail-open + failover design (§3b), rotating-key fixed window (§3c), 429 contract (§3d), testing strategy |
-| [task-decomposition.md](task-decomposition.md) | Core (~2.5h) vs. extension tiers, time-boxing, cut lines |
-| [prompts/](prompts/) | The prompts used to generate the planning docs, the architect review pass, and the post-implementation code review |
+| [issue-43881/README.md](issue-43881/README.md) | Spec index, context, and grounding facts verified against `6.1.2` — **start here** |
+| [issue-43881/feature-specification.md](issue-43881/feature-specification.md) | Scope; the two pluggability axes (storage + algorithm) and the availability axis (fail-open + `FailoverStore`); strategy choice; trade-offs; deferred pillars |
+| [issue-43881/implementation-plan.md](issue-43881/implementation-plan.md) | Architecture, files, key interfaces, fail-open + failover design (§3b), rotating-key fixed window (§3c), 429 contract (§3d), testing strategy |
+| [issue-43881/task-decomposition.md](issue-43881/task-decomposition.md) | Core (~2.5h) vs. extension tiers, time-boxing, cut lines |
+| [issue-43881/prompts/](issue-43881/prompts/) | The prompts used to generate the planning docs, the architect review pass, and the post-implementation code review |
 
 ## Process
 
-1. **Plan (docs only).** Prompt 1 (`prompts/1. spec-generate.md`) produced the spec, plan,
-   and decomposition, grounded against the `6.1.2` tag (verified facts listed in the spec).
+1. **Plan (docs only).** Prompt 1 (`issue-43881/prompts/1. spec-generate.md`) produced the
+   spec, plan, and decomposition, grounded against the `6.1.2` tag (facts listed in the spec).
 2. **Architect review.** A Principal-Architect review pass (prompt 2) drove the
    fail-open + `FailoverStore` failover revisions and the rotating-key portability fix.
 3. **Implement per task.** Commits are made per decomposition task so the git history
    doubles as a workflow artifact.
-4. **Code review.** A deep code-review pass (prompt 3, `prompts/3. code-review.md`) audited
-   the implementation, tests, and docs; its findings were then fixed (see the commit
+4. **Code review.** A deep code-review pass (prompt 3, `issue-43881/prompts/3. code-review.md`)
+   audited the implementation, tests, and docs; its findings were then fixed (see the commit
    history) — settings clamping, DRY/naming cleanups, `FailoverStore` tests, extra
    integration coverage, and doc-accuracy fixes.
 

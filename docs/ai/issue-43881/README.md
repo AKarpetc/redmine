@@ -14,7 +14,7 @@ The challenge brief is according to tech task.
 
 ## Enabling & configuring the rate limiter
 
-Full reference: [`README_RATE_LIMITING.md`](../../README_RATE_LIMITING.md) at the repo root.
+Full reference: [`README_RATE_LIMITING.md`](../../../README_RATE_LIMITING.md) at the repo root.
 Quick guide below.
 
 ### Enable / disable

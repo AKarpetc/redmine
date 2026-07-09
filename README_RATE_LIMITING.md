@@ -414,6 +414,6 @@ memory counters (§3).
 ## 11. AI workflow
 
 Built with Claude Code. The planning artifacts (feature spec, task decomposition,
-implementation plan) and the prompts that produced them live under
-`sdd_docs/issue-43881/` (mirrored into `docs/ai/`). Commits are made per task so the git
-history doubles as a workflow record.
+implementation plan) and the prompts that produced them — including the post-implementation
+code-review prompt — live under [`docs/ai/issue-43881/`](docs/ai/issue-43881/README.md).
+Commits are made per task so the git history doubles as a workflow record.
