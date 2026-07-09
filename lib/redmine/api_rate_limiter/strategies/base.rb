@@ -48,6 +48,14 @@ module Redmine
         def self.window_label(seconds)
           seconds.to_i == 60 ? 'minute' : "#{seconds.to_i} seconds"
         end
+
+        # Shared fail-open result for counter strategies: a nil count means the
+        # store failsafe swallowed an error (e.g. RedisCacheStore#failsafe) - we
+        # allow the request and treat one slot as spent rather than 500.
+        def self.fail_open(limit:, reset_at:, window_label:)
+          Result.allowed(limit: limit, remaining: limit - 1,
+                         reset_at: reset_at, window_label: window_label)
+        end
       end
     end
   end

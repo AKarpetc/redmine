@@ -47,7 +47,7 @@ module ApiRateLimitable
   def check_api_rate_limit
     result = Redmine::ApiRateLimiter.check(rate_limit_key)
     # Set X-RateLimit-* on the allowed path too, so clients can self-throttle.
-    result.to_headers.each { |header, value| response.set_header(header, value) }
+    response.headers.merge!(result.to_headers)
     return true if result.allowed?
 
     render_rate_limit_error(result)

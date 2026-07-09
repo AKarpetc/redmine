@@ -111,6 +111,24 @@ class Redmine::ApiRateLimiterTest < ActiveSupport::TestCase
     assert_kind_of ActiveSupport::Cache::MemoryStore, Redmine::ApiRateLimiter.store
   end
 
+  # Misconfiguration guard: the Setting layer validates integer-ness but not
+  # range, so a window of 0 would divide by zero in the strategy. The facade
+  # clamps window to >= 1, so check must never raise on the hot path.
+  def test_check_with_zero_window_does_not_raise
+    with_settings(fixed_settings(requests: 3, window: 0)) do
+      assert_nothing_raised do
+        assert Redmine::ApiRateLimiter.check('user:1').allowed?
+      end
+    end
+  end
+
+  # requests = 0 is a valid "block everything" configuration, not a crash.
+  def test_check_with_zero_requests_blocks_all
+    with_settings(fixed_settings(requests: 0)) do
+      assert_not Redmine::ApiRateLimiter.check('user:1').allowed?
+    end
+  end
+
   # --- Fixed Window ---
 
   def test_fixed_window_allows_up_to_limit
@@ -195,6 +213,27 @@ class Redmine::ApiRateLimiterTest < ActiveSupport::TestCase
     assert result.allowed?
   end
 
+  def test_sliding_window_counter_header_values_match_spec
+    at = Time.utc(2026, 1, 1, 0, 0, 30) # 30s into a 60s window, empty previous
+    travel_to(at) do
+      result = SWC.consume(store: @store, key: 'k', limit: 5, window: 60, now: Time.current)
+      assert_equal 5, result.limit
+      # weighted = current(1) + previous(0) * weight -> remaining floored to 4
+      assert_equal 4, result.remaining
+      assert_equal(((at.to_i / 60) + 1) * 60, result.reset_at)
+    end
+  end
+
+  def test_sliding_window_counter_rejected_headers
+    travel_to(Time.utc(2026, 1, 1, 0, 0, 0)) do
+      3.times { SWC.consume(store: @store, key: 'k', limit: 3, window: 60, now: Time.current) }
+      result = SWC.consume(store: @store, key: 'k', limit: 3, window: 60, now: Time.current)
+      assert_not result.allowed?
+      assert_equal 0, result.remaining
+      assert_operator result.retry_after, :>=, 1
+    end
+  end
+
   # --- Token Bucket (sequential only; see plan 3a for the concurrency caveat) ---
 
   def test_token_bucket_allows_burst_then_rejects
@@ -230,6 +269,37 @@ class Redmine::ApiRateLimiterTest < ActiveSupport::TestCase
   def test_token_bucket_nil_read_starts_full_and_allows
     result = TB.consume(store: nil_store, key: 'k', burst: 3, refill_rate: 1.0, now: Time.current)
     assert result.allowed?
+  end
+
+  def test_token_bucket_reset_at_on_allowed_is_in_the_future
+    at = Time.utc(2026, 1, 1, 0, 0, 0)
+    travel_to(at) do
+      result = TB.consume(store: @store, key: 'k', burst: 5, refill_rate: 2.0, now: Time.current)
+      assert result.allowed?
+      # reset_at = now + time to refill back to full; always at/after now.
+      assert_operator result.reset_at, :>=, at.to_i
+    end
+  end
+
+  def test_token_bucket_rejected_retry_after_matches_refill
+    at = Time.utc(2026, 1, 1, 0, 0, 0)
+    travel_to(at) do
+      3.times { TB.consume(store: @store, key: 'k', burst: 3, refill_rate: 1.0, now: Time.current) }
+      result = TB.consume(store: @store, key: 'k', burst: 3, refill_rate: 1.0, now: Time.current)
+      assert_not result.allowed?
+      # bucket empty, refill 1 token/s -> wait ~1s -> Retry-After 1.
+      assert_equal 1, result.retry_after
+      assert_operator result.reset_at, :>=, at.to_i
+    end
+  end
+
+  # refill_rate = 0 must not divide by zero; the bucket simply never refills.
+  def test_token_bucket_zero_refill_rate_does_not_raise
+    assert_nothing_raised do
+      result = TB.consume(store: @store, key: 'k', burst: 1, refill_rate: 0.0, now: Time.current)
+      assert result.allowed? # first request drains the single token
+      assert_not TB.consume(store: @store, key: 'k', burst: 1, refill_rate: 0.0, now: Time.current).allowed?
+    end
   end
 
   # --- Fail-open at the facade layer: a raising store propagates (the concern

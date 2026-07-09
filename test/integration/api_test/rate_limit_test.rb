@@ -80,6 +80,35 @@ class Redmine::ApiTest::RateLimitTest < Redmine::ApiTest::Base
       assert_response :too_many_requests
       assert_equal 'application/xml', response.media_type
       assert_includes response.body, 'Rate limit exceeded'
+      # Structured body rendered under an <error> root (not render_error's envelope).
+      doc = Hash.from_xml(response.body)
+      assert doc.key?('error'), 'expected an <error> root element'
+      assert_equal 'Rate limit exceeded', doc['error']['error']
+      assert_includes doc['error']['message'], 'rate limit'
+    end
+  end
+
+  # End-to-end proof that the algorithm is swappable at runtime via Setting,
+  # with no restart and no code change (token bucket: burst then throttle).
+  def test_algorithm_is_switchable_via_setting
+    with_settings(RATE.merge(:rest_api_rate_limit_algorithm => 'token_bucket',
+                             :rest_api_rate_limit_burst => '3',
+                             :rest_api_rate_limit_refill_rate => '0.01')) do
+      3.times do
+        get '/projects.json', :headers => auth
+        assert_response :success
+      end
+      get '/projects.json', :headers => auth
+      assert_response :too_many_requests
+      assert_equal '3', response.headers['X-RateLimit-Limit']
+    end
+  end
+
+  # A misconfigured window (0) must not 500 the API: the facade clamps it.
+  def test_zero_window_setting_does_not_error
+    with_settings(RATE.merge(:rest_api_rate_limit_window => '0')) do
+      get '/projects.json', :headers => auth
+      assert_response :success
     end
   end
 

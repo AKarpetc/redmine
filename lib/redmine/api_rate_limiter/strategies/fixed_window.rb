@@ -44,10 +44,7 @@ module Redmine
           # failed open (e.g. RedisCacheStore#failsafe swallowed a connection
           # error) - allow the request rather than NoMethodError -> 500.
           count = store.increment(ckey, 1, expires_in: window * 2)
-          if count.nil?
-            return Result.allowed(limit: limit, remaining: limit - 1,
-                                  reset_at: reset_at, window_label: label)
-          end
+          return fail_open(limit: limit, reset_at: reset_at, window_label: label) if count.nil?
 
           if count > limit
             Result.rejected(limit: limit, reset_at: reset_at,

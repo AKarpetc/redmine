@@ -118,10 +118,12 @@ parameterized across memory and file stores. Invariant for every counter strateg
 **increment first, then compare** (never read-then-increment — that races even on an atomic
 store).
 
-**Token Bucket is approximate on shared stores.** It is a read-modify-write over the
-generic cache API (read `{tokens, updated_at}` → refill → write), so under concurrency two
-requests can read the same stale count and both pass. It is **exact on a single-process
-`:memory_store`** and approximate elsewhere. The exact fix (Redis `WATCH`/`MULTI` or a Lua
+**Token Bucket is approximate under concurrency.** It is a read-modify-write over the
+generic cache API (read `{tokens, updated_at}` → refill → write) with an unsynchronized gap
+between the read and the write, so two requests can read the same stale count and both pass.
+It is **exact only sequentially (a single-threaded caller)**; under a multi-threaded server
+(e.g. Puma) it races even on a single-process `:memory_store`, and races further on a shared
+store. The exact fix (Redis `WATCH`/`MULTI` or a Lua
 script) can't be expressed through the generic cache API and is a named deferred extension.
 Its unit tests assert steady-state behavior sequentially and deliberately do **not** assert
 an exact ceiling under simulated concurrency.
@@ -196,6 +198,15 @@ depth); breaker transitions are instrumented so a silent degradation is still al
 6. **Anonymous keying trusts `request.remote_ip`** — behind a misconfigured proxy,
    `X-Forwarded-For` spoofing can rotate IPs to bypass the anon limit, or spoof a victim's
    IP to throttle them. The guarantee is only as good as Redmine's trusted-proxy config.
+7. **Only `format=xml|json` requests are limited.** `api_request?` keys off the request
+   *format* (URL suffix `.json`/`.xml` or `?format=`), matching Redmine's existing API
+   convention. A client that negotiates JSON purely via an `Accept: application/json`
+   header on an extension-less path is served as API but is **not** rate-limited. Clients
+   that hit the limiter should use the explicit `.json`/`.xml` suffix.
+8. **Settings are range-clamped, not range-validated.** The `Setting` layer validates
+   integer-ness but not range, so the facade clamps at read time (`window` floors at 1s to
+   avoid a divide-by-zero; counts/rates floor at 0). A `requests` of `0` therefore blocks
+   all API traffic by design rather than raising.
 
 ## 8. Deferred
 
@@ -309,8 +320,8 @@ sleep 6; hammer 1   # one token refilled -> 200 again
 ```
 
 The bucket absorbs an organic burst (up to `burst`) then throttles to the sustained
-`refill_rate`. Note the documented caveat: token bucket is **exact on a single-process
-`:memory_store`** and **approximate on a shared store under concurrency** (§4).
+`refill_rate`. Note the documented caveat: token bucket is **exact only sequentially** and
+**approximate under concurrency** — even single-process on a multi-threaded server (§4).
 
 > Postman: import any curl above via **Import → Raw text**, then use the **Collection Runner**
 > (set *Iterations* to e.g. 12) to fire it repeatedly and watch the 200 → 429 transition and

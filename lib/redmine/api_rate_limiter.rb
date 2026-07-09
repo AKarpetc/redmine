@@ -59,7 +59,7 @@ module Redmine
         return Result.disabled unless Setting.rest_api_rate_limit_enabled?
 
         strategy_for(Setting.rest_api_rate_limit_algorithm)
-          .consume(store: store, key: key, now: Time.current, **params)
+          .consume(store: store, key: key, now: Time.current, **strategy_params)
       end
 
       # Resolve the strategy class for an algorithm name; unknown or blank falls
@@ -73,12 +73,17 @@ module Redmine
       # All configurable parameters, read fresh each request so Setting changes
       # take effect without a restart. Strategies pick the keys they need and
       # swallow the rest via **opts.
-      def params
+      #
+      # Values are clamped defensively: the Setting layer validates integer-ness
+      # but not range, so an admin typo (e.g. window = 0) must not reach a
+      # strategy and divide by zero on the API hot path. +window+ floors at 1s;
+      # counts/rates floor at 0 (0 = block everything, a deliberate choice).
+      def strategy_params
         {
-          limit:       Setting.rest_api_rate_limit_requests.to_i,
-          window:      Setting.rest_api_rate_limit_window.to_i,
-          burst:       Setting.rest_api_rate_limit_burst.to_i,
-          refill_rate: Setting.rest_api_rate_limit_refill_rate.to_f
+          limit:       [Setting.rest_api_rate_limit_requests.to_i, 0].max,
+          window:      [Setting.rest_api_rate_limit_window.to_i, 1].max,
+          burst:       [Setting.rest_api_rate_limit_burst.to_i, 0].max,
+          refill_rate: [Setting.rest_api_rate_limit_refill_rate.to_f, 0.0].max
         }
       end
 
@@ -86,7 +91,9 @@ module Redmine
         config =
           begin
             Rails.application.config.redmine_api_rate_limit_cache_store
-          rescue StandardError
+          rescue NameError
+            # Config accessor not defined yet (boot ordering, NoMethodError is a
+            # NameError) - use the default.
             :memory_store
           end
         config ||= :memory_store

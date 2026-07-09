@@ -36,10 +36,15 @@ module Redmine
           refill_rate = refill_rate.to_f
           at          = now.to_f
           ckey        = cache_key('tb', key)
+          ttl         = ttl_for(burst, refill_rate)
           # Window label = time to refill a full bucket, so the 429 message reads
           # "N requests per minute" (or "per S seconds") rather than a raw count.
-          label       = refill_rate.positive? ? window_label((burst / refill_rate).round) : "#{burst} requests"
-          ttl         = ttl_for(burst, refill_rate)
+          label =
+            if refill_rate.positive?
+              window_label((burst / refill_rate).round)
+            else
+              "#{burst} requests"
+            end
 
           state = store.read(ckey)
           tokens, updated_at =

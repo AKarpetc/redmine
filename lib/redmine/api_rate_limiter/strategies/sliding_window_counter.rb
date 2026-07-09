@@ -41,16 +41,15 @@ module Redmine
           elapsed       = epoch % window
           prev_weight   = (window - elapsed).to_f / window
           reset_at      = (current_index + 1) * window
+          current_ckey  = cache_key('swc', key, current_index)
+          prev_ckey     = cache_key('swc', key, prev_index)
 
-          current = store.increment(cache_key('swc', key, current_index), 1, expires_in: window * 2)
-          if current.nil?
-            # Store failed open -> allow.
-            return Result.allowed(limit: limit, remaining: limit - 1,
-                                  reset_at: reset_at, window_label: label)
-          end
+          current = store.increment(current_ckey, 1, expires_in: window * 2)
+          # Store failed open -> allow.
+          return fail_open(limit: limit, reset_at: reset_at, window_label: label) if current.nil?
 
           # nil (missing or failed read) counts as 0 previous requests.
-          previous = store.read(cache_key('swc', key, prev_index)).to_i
+          previous = store.read(prev_ckey).to_i
           weighted = current + (previous * prev_weight)
 
           if weighted > limit

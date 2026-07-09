@@ -47,7 +47,7 @@ module Redmine
     # Degrading to a per-process ceiling is deliberately preferred over "fully
     # open"; breaker transitions are instrumented so the degradation is alertable.
     class FailoverStore
-      PORTABLE_OPS = %i[increment read write].freeze
+      PORTABLE_OPS = [:increment, :read, :write].freeze
 
       def initialize(primary:, fallback:, error_threshold: 5, cooldown: 30)
         @primary = primary
@@ -102,6 +102,12 @@ module Redmine
       end
 
       def record_success
+        # Fast path: when the breaker is already closed and clean there is
+        # nothing to reset, so skip the lock on the common (healthy) call. The
+        # unsynchronized read is a benign race - the worst case is one redundant
+        # lock acquisition, never lost breaker state.
+        return if @failures.zero? && @open_until.nil?
+
         @mutex.synchronize do
           @failures = 0
           @open_until = nil
