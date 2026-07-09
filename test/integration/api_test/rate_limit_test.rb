@@ -47,6 +47,13 @@ class Redmine::ApiTest::RateLimitTest < Redmine::ApiTest::Base
     {'X-Redmine-API-Key' => @token.value.to_s}
   end
 
+  # Pin the clock so a burst of requests lands in a single fixed window even on
+  # a slow CI runner. Without this, a real-clock window boundary can split the
+  # burst, the rotating-key counter resets mid-test, and the 429 assertion flakes.
+  def in_single_window(&)
+    travel_to(Time.utc(2026, 1, 1, 12, 0, 0), &)
+  end
+
   def test_requests_under_limit_all_succeed
     with_settings(RATE) do
       3.times do
@@ -58,8 +65,10 @@ class Redmine::ApiTest::RateLimitTest < Redmine::ApiTest::Base
 
   def test_over_limit_returns_429_with_headers_and_json_body
     with_settings(RATE) do
-      3.times { get '/projects.json', :headers => auth }
-      get '/projects.json', :headers => auth
+      in_single_window do
+        3.times { get '/projects.json', :headers => auth }
+        get '/projects.json', :headers => auth
+      end
 
       assert_response :too_many_requests
       assert_equal '3', response.headers['X-RateLimit-Limit']
@@ -75,7 +84,7 @@ class Redmine::ApiTest::RateLimitTest < Redmine::ApiTest::Base
 
   def test_over_limit_returns_429_with_xml_body
     with_settings(RATE) do
-      4.times { get '/projects.xml', :headers => auth }
+      in_single_window { 4.times { get '/projects.xml', :headers => auth } }
 
       assert_response :too_many_requests
       assert_equal 'application/xml', response.media_type
@@ -94,11 +103,13 @@ class Redmine::ApiTest::RateLimitTest < Redmine::ApiTest::Base
     with_settings(RATE.merge(:rest_api_rate_limit_algorithm => 'token_bucket',
                              :rest_api_rate_limit_burst => '3',
                              :rest_api_rate_limit_refill_rate => '0.01')) do
-      3.times do
+      in_single_window do
+        3.times do
+          get '/projects.json', :headers => auth
+          assert_response :success
+        end
         get '/projects.json', :headers => auth
-        assert_response :success
       end
-      get '/projects.json', :headers => auth
       assert_response :too_many_requests
       assert_equal '3', response.headers['X-RateLimit-Limit']
     end
@@ -116,24 +127,28 @@ class Redmine::ApiTest::RateLimitTest < Redmine::ApiTest::Base
     other = User.generate!
     other_token = Token.create!(:user => other, :action => 'api')
     with_settings(RATE) do
-      3.times { get '/projects.json', :headers => auth }
-      get '/projects.json', :headers => auth
-      assert_response :too_many_requests
+      in_single_window do
+        3.times { get '/projects.json', :headers => auth }
+        get '/projects.json', :headers => auth
+        assert_response :too_many_requests
 
-      # A different caller has its own bucket and is unaffected.
-      get '/projects.json', :headers => {'X-Redmine-API-Key' => other_token.value.to_s}
-      assert_response :success
+        # A different caller has its own bucket and is unaffected.
+        get '/projects.json', :headers => {'X-Redmine-API-Key' => other_token.value.to_s}
+        assert_response :success
+      end
     end
   end
 
   def test_anonymous_requests_are_keyed_by_ip
     with_settings(RATE) do
-      3.times do
+      in_single_window do
+        3.times do
+          get '/projects.json'
+          assert_response :success
+        end
         get '/projects.json'
-        assert_response :success
+        assert_response :too_many_requests
       end
-      get '/projects.json'
-      assert_response :too_many_requests
     end
   end
 
@@ -159,11 +174,15 @@ class Redmine::ApiTest::RateLimitTest < Redmine::ApiTest::Base
 
   def test_counter_resets_after_window
     with_settings(RATE.merge(:rest_api_rate_limit_window => '1')) do
-      3.times { get '/projects.json', :headers => auth }
-      get '/projects.json', :headers => auth
-      assert_response :too_many_requests
+      # Burst pinned to one 1s window so the 4th request is deterministically over.
+      travel_to(Time.utc(2026, 1, 1, 12, 0, 0)) do
+        3.times { get '/projects.json', :headers => auth }
+        get '/projects.json', :headers => auth
+        assert_response :too_many_requests
+      end
 
-      travel(2.seconds) do
+      # A later window uses a fresh rotating key -> the counter has reset.
+      travel_to(Time.utc(2026, 1, 1, 12, 0, 2)) do
         get '/projects.json', :headers => auth
         assert_response :success
       end
