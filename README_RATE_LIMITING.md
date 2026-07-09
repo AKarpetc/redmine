@@ -316,6 +316,69 @@ The bucket absorbs an organic burst (up to `burst`) then throttles to the sustai
 > (set *Iterations* to e.g. 12) to fire it repeatedly and watch the 200 → 429 transition and
 > the `X-RateLimit-*` headers count down.
 
+### Using Redis storage (and inspecting the counters)
+
+The default `:memory_store` keeps counters per process. Point the limiter at **Redis** to get
+a single shared limit across all processes/hosts — and to watch the counters directly.
+
+**1. Add the gem** (Redis is operator-added, not bundled with core Redmine):
+
+```ruby
+# Gemfile
+gem "redis", "~> 5.0"
+# ActiveSupport 7.2's RedisCacheStore uses the connection_pool 2.x API; pin it
+# if bundler resolves 3.x (whose ConnectionPool.new signature is incompatible).
+gem "connection_pool", "~> 2.5"
+```
+
+```bash
+bundle install
+```
+
+**2. Point the store at Redis** — in `config/application.rb` (the documented axis), or a small
+initializer for a local/demo override. A DB index keeps the counters isolated from other data:
+
+```ruby
+# config/initializers/rate_limit_redis.rb  (or the config line in application.rb)
+Rails.application.config.redmine_api_rate_limit_cache_store =
+  ActiveSupport::Cache::RedisCacheStore.new(
+    url: "redis://localhost:6379/0",         # /0 = default DB most GUIs show; use /15 to isolate
+    connect_timeout: 0.2, read_timeout: 0.2, write_timeout: 0.2, reconnect_attempts: 0
+  )
+```
+
+Restart the server. Counters now live in Redis; a Redis outage still **fails open** (§5).
+
+**3. Inspect the counters** while hitting the API. The limiter namespaces every key under
+`rl:` and the shape encodes the algorithm (`<caller>` is `user:<id>` or `ip:<addr>`):
+
+| Algorithm | Redis key(s) | Value |
+|---|---|---|
+| `fixed_window` | `rl:fw:<caller>:<window-index>` | integer count |
+| `sliding_window_counter` | `rl:swc:<caller>:<window-index>` (current + previous) | integer counts |
+| `token_bucket` | `rl:tb:<caller>` | serialized `{tokens, updated_at}` |
+
+```bash
+KEY=<your api key>
+DB=0                      # match the DB in the URL above
+RCLI="redis-cli -n $DB"   # or: docker exec <redis-container> redis-cli -n $DB
+
+# generate traffic (token bucket, burst 10)
+for i in $(seq 1 12); do
+  curl -s -o /dev/null -w "%{http_code} " -H "X-Redmine-API-Key: $KEY" \
+       http://localhost:3000/projects.json
+done; echo            # 200 x10 then 429
+
+$RCLI keys 'rl:*'         # list the limiter's keys
+$RCLI get  rl:tb:user:1   # inspect the bucket (tb = a Ruby-marshalled hash; fw/swc = plain ints)
+$RCLI ttl  rl:tb:user:1   # remaining TTL (idle keys are GC'd)
+$RCLI del  rl:tb:user:1   # reset this caller's bucket
+```
+
+Switch algorithms and re-run to watch `rl:fw:*` / `rl:swc:*` counters increment instead. On a
+shared Redis this count is the single global limit — the correctness upgrade over per-process
+memory counters (§3).
+
 ## 10. AI workflow
 
 Built with Claude Code. The planning artifacts (feature spec, task decomposition,
